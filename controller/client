@@ -1,0 +1,95 @@
+// ASYNC
+const async = require('async');
+// MODEL
+const clientModel = require('../model/client');
+const smsHistoryModel = require('./../model/smsHistory');
+
+
+exports.createClient = function (req, res) {
+    const { number } = req.body;
+    var userData = {};
+    async.series([function (callback) {
+        clientModel.findOne({ number: number }, function (err, res) {
+            if (!err) {
+                userData = res;
+                process.nextTick(callback, null);
+            } else {
+                process.nextTick(callback, "Database error.");
+            }
+        });
+    }, function (callback) {
+        if (!!userData && !!userData.number) {
+            process.nextTick(callback, "Client already exists.");
+        } else {
+            clientModel.create(req.body, function (err, user) {
+                if (!err) {
+                    process.nextTick(callback, null);
+                } else {
+                    process.nextTick(callback, err);
+                }
+            });
+        }
+    }], function (err, result) {
+        if (!err) {
+            res.status(200).json({ message: "Client created." });
+        } else {
+            res.status(200).json({ message: err });
+        }
+    });
+}
+
+exports.listAllClients = async function (req, res) {
+    try {
+        const clients = await clientModel.find({});
+        res.status(200).json(clients);
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+};
+
+
+exports.getClient = async function (req, res) {
+    const id = req.params.id;
+    console.log("id", id);
+    try {
+        const client = await clientModel.findById(id);
+        res.status(200).json(client);
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+};
+
+exports.sendSMS = async (req, res, next) => {
+    console.log(req.body);
+    const { number, message } = req.body;
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    const client = require('twilio')(accountSid, authToken);
+    client.messages.create({
+        body: message,
+        from: '+17792378698',
+        to: '+91' + number,
+    }).then((message) => {
+        console.log(message);
+        smsHistoryModel.create(req.body, function (err) {
+            if (!err) {
+                res.status(200).json({message: 'SMS Send Successfully.'});
+            } else {
+                res.status(400).json({ message: err.message });
+            }
+        });
+    }).catch((err) => {
+        res.status(400).json({ message: err.message });
+    });
+}
+
+exports.SMSHistory = async function (req, res) {
+    try {
+        const smsHistory = await smsHistoryModel.find({});
+        res.status(200).json(smsHistory);
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+};
+
+
